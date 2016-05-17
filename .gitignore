@@ -1,0 +1,6 @@
+devenv/
+*egg-info
+*.pyc
+.tox
+data/
+.idea/
