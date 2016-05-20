@@ -21,10 +21,23 @@ tf.app.flags.DEFINE_string('validation_share', 0.05,
 tf.app.flags.DEFINE_string('max_images', 4096,
                            """Max number of images imported. 0 for no limit.""")
 
+# constants of the runway dataset
 IMAGE_WIDTH = 142
 IMAGE_HEIGHT = 302
 
-def convert_to_record(image, label, writer):
+# other values
+_FILENAME_TRAIN = 'train.tfrecords'
+_FILENAME_TEST = 'test.tfrecords'
+_FILENAME_VAL = 'val.tfrecords'
+
+def _convert_to_record(image, label, writer):
+    """
+    Serialize a single image and label and write it
+    to a TFRecord
+    :param image: 3D image tensor
+    :param label: 1D label tensor
+    :param writer: file writer
+    """
     image_raw = image.tostring()
     rows = image.shape[1]
     cols = image.shape[2]
@@ -40,6 +53,9 @@ def convert_to_record(image, label, writer):
 
 
 def serialize():
+    """
+    Serialize the Runway images and labels into TFRecords
+    """
     base_data_path = FLAGS.input_dir
     images_paths = []
 
@@ -89,66 +105,98 @@ def serialize():
         threads = tf.train.start_queue_runners(coord=coord)
 
         # write training images
-        filename = os.path.join(FLAGS.data_dir, 'train' + '.tfrecords')
+        filename = os.path.join(FLAGS.data_dir, _FILENAME_TRAIN)
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
         for i in range(num_train_images):
             image_tensor = np.array(sess.run([image]))
-            convert_to_record(image_tensor, np.array([0]), writer)
+            _convert_to_record(image_tensor, np.array([0]), writer)
         writer.close()
 
         # write test images
-        filename = os.path.join(FLAGS.data_dir, 'test' + '.tfrecords')
+        filename = os.path.join(FLAGS.data_dir, _FILENAME_TEST)
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
         for i in range(num_test_images):
             image_tensor = np.array(sess.run([image]))
-            convert_to_record(image_tensor, np.array([0]), writer)
+            _convert_to_record(image_tensor, np.array([0]), writer)
         writer.close()
 
         # write val images
-        filename = os.path.join(FLAGS.data_dir, 'val' + '.tfrecords')
+        filename = os.path.join(FLAGS.data_dir, _FILENAME_VAL)
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
         for i in range(num_val_images):
             image_tensor = np.array(sess.run([image]))
-            convert_to_record(image_tensor, np.array([0]), writer)
+            _convert_to_record(image_tensor, np.array([0]), writer)
         writer.close()
 
         # Finish off the filename queue coordinator.
         coord.request_stop()
         coord.join(threads)
 
-    # uncomment to test the serialization
-    '''with tf.Session() as sess:
-        # Required to get the filename matching to run.
-        tf.initialize_all_variables().run()
+def _read_and_decode(filename_queue):
+    """
+    Reads and deserialize a single example from the queue
+    :param filename_queue: files to read
+    :return: image, label
+    """
+    reader = tf.TFRecordReader()
+    _, serialized_example = reader.read(filename_queue)
+    features = tf.parse_single_example(
+        serialized_example,
+        # Defaults are not specified since both keys are required.
+        features={
+            'image_raw': tf.FixedLenFeature([], tf.string),
+            'label': tf.FixedLenFeature([], tf.int64),
+        })
 
-        for serialized_example in tf.python_io.tf_record_iterator(filename):
-            # example = tf.train.Example()
-            # example.ParseFromString(serialized_example)
+    # Convert from a scalar string tensor (whose single string has
+    # length mnist.IMAGE_PIXELS) to a uint8 tensor with shape
+    # [mnist.IMAGE_PIXELS].
+    image = tf.decode_raw(features['image_raw'], tf.uint8)
+    image.set_shape([IMAGE_WIDTH * IMAGE_HEIGHT * 3])
+    image = tf.reshape(image, [IMAGE_HEIGHT, IMAGE_WIDTH, 3])
 
-            features = tf.parse_single_example(
-                serialized_example,
-                # Defaults are not specified since both keys are required.
-                features={
-                    'image_raw': tf.FixedLenFeature([], tf.string),
-                    'label': tf.FixedLenFeature([], tf.int64),
-                })
+    # OPTIONAL: Could reshape into a 28x28 image and apply distortions
+    # here.  Since we are not applying any distortions in this
+    # example, and the next step expects the image to be flattened
+    # into a vector, we don't bother.
 
-            # Convert from a scalar string tensor (whose single string has
-            # length mnist.IMAGE_PIXELS) to a uint8 tensor with shape
-            # [mnist.IMAGE_PIXELS].
-            image = tf.decode_raw(features['image_raw'], tf.uint8)
-            image.set_shape([IMAGE_WIDTH * IMAGE_HEIGHT * 3])
-            image = tf.reshape(image, [IMAGE_HEIGHT, IMAGE_WIDTH, 3])
+    # Convert from [0, 255] -> [-0.5, 0.5] floats.
+    image = tf.cast(image, tf.float32) * (1. / 255) - 0.5
 
-            # traverse the Example format to get data
-            # label = example.features.feature['label'].int64_list.value[0]
-            # do something
-            im = sess.run(image)
-            print(im)
-    '''
+    # Convert label from a scalar uint8 tensor to an int32 scalar.
+    label = tf.cast(features['label'], tf.int32)
+
+    return image, label
+
+def inputs(batch_size):
+    """
+    Read images and labels in shuffled batches
+    :param batch_size: size of the batch
+    :return: images 4D tensor, labels 1D tensor
+    """
+    filename = os.path.join(FLAGS.data_dir, _FILENAME_TRAIN)
+
+    with tf.name_scope('input'):
+        filename_queue = tf.train.string_input_producer([filename])
+
+        # Even when reading in multiple threads, share the filename
+        # queue.
+        image, label = _read_and_decode(filename_queue)
+
+        # Shuffle the examples and collect them into batch_size batches.
+        # (Internally uses a RandomShuffleQueue.)
+        # We run this in two threads to avoid being a bottleneck.
+        images, sparse_labels = tf.train.shuffle_batch(
+            [image, label], batch_size=batch_size, num_threads=2,
+            capacity=1000 + 3 * batch_size,
+            # Ensures a minimum amount of shuffling of examples.
+            min_after_dequeue=1000)
+
+    return images, sparse_labels
+
 
 if __name__ == '__main__':
     serialize()

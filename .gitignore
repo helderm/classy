@@ -2,5 +2,5 @@ devenv/
 *egg-info
 *.pyc
 .tox
-data/
+data/release*
 .idea/
