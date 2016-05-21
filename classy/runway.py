@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from random import shuffle
 
 import os
 import glob
@@ -58,30 +59,61 @@ def serialize():
     """
     base_data_path = FLAGS.input_dir
     images_paths = []
+    images_labels = []
 
     # get all images paths
     for brand in os.listdir(base_data_path):
         brand_path = os.path.join(base_data_path, brand)
         for fashionshow in os.listdir(brand_path):
+            #get labels
+                #0: Spring
+                #1: Fall
+                #2: Resort
+                #3: Pre-fall
+            image_label = -1
+            if (fashionshow[0] == 'S'):
+                image_label = 0
+            elif (fashionshow[0] == 'F'):
+                image_label = 1
+            elif (fashionshow[0] == '2'):
+                if (fashionshow[4] == 'R'):
+                    image_label = 2
+                if (fashionshow[4] == 'P'):
+                    image_label = 3
+            if (image_label == -1):
+                raise ValueError('Label could not be identified')
+                
             fashionshow_path = os.path.join(brand_path, fashionshow)
             image_files = glob.glob(fashionshow_path + '/*.jpg')
             images_paths.extend(image_files)
+            for i in range (len(image_files)):
+                images_labels.append(image_label)
 
         if FLAGS.max_images and len(images_paths) > FLAGS.max_images:
             images_paths[:FLAGS.max_images]
+            images_labels[:FLAGS.max_images]
             break
-
+    
+    if (len(images_paths) != len(images_labels)):
+        raise ValueError('Inputs and outputs have different lengths')
+    
     # shuffle the images
-    np.random.shuffle(images_paths)
+    images_paths_shuf = []
+    images_labels_shuf = []
+    index_shuf = list(range(len(images_paths)))
+    shuffle(index_shuf)
+    for i in index_shuf:
+        images_paths_shuf.append(images_paths[i])
+        images_labels_shuf.append(images_labels[i])
 
     # set the queue
-    filename_queue = tf.train.string_input_producer(images_paths)
+    filename_queue = tf.train.string_input_producer(images_paths_shuf, shuffle=False)
 
     # calculate how many images each set will have
-    num_test_images = int(len(images_paths) * FLAGS.test_share)
-    num_val_images = int(len(images_paths) * FLAGS.validation_share)
-    num_train_images = len(images_paths) - num_test_images - num_val_images
-
+    num_test_images = int(len(images_paths_shuf) * FLAGS.test_share)
+    num_val_images = int(len(images_paths_shuf) * FLAGS.validation_share)
+    num_train_images = len(images_paths_shuf) - num_test_images - num_val_images
+    
     # Read an entire image file which is required since they're JPEGs, if the images
     # are too large they could be split in advance to smaller files or use the Fixed
     # reader to split up the file.
@@ -110,25 +142,25 @@ def serialize():
         writer = tf.python_io.TFRecordWriter(filename)
         for i in range(num_train_images):
             image_tensor = np.array(sess.run([image]))
-            _convert_to_record(image_tensor, np.array([0]), writer)
+            _convert_to_record(image_tensor, np.array([images_labels_shuf[i]]), writer)
         writer.close()
 
         # write test images
         filename = os.path.join(FLAGS.data_dir, _FILENAME_TEST)
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
-        for i in range(num_test_images):
+        for i in range(num_train_images,(num_train_images + num_test_images)):
             image_tensor = np.array(sess.run([image]))
-            _convert_to_record(image_tensor, np.array([0]), writer)
+            _convert_to_record(image_tensor, np.array([images_labels_shuf[i]]), writer)
         writer.close()
 
         # write val images
         filename = os.path.join(FLAGS.data_dir, _FILENAME_VAL)
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
-        for i in range(num_val_images):
+        for i in range((num_train_images + num_test_images),(num_train_images + num_test_images + num_val_images)):
             image_tensor = np.array(sess.run([image]))
-            _convert_to_record(image_tensor, np.array([0]), writer)
+            _convert_to_record(image_tensor, np.array([images_labels_shuf[i]]), writer)
         writer.close()
 
         # Finish off the filename queue coordinator.
