@@ -13,13 +13,13 @@ import numpy as np
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('input_dir', '../data/release_runway_0.2/data/images/',
                            """Path to the Runway data directory.""")
-tf.app.flags.DEFINE_string('data_dir', '../data/release_runway_0.2/data/',
+tf.app.flags.DEFINE_string('output_dir', '../data/release_runway_0.2/data/',
                            """Path to the serialized Runway dataset.""")
 tf.app.flags.DEFINE_string('test_share', 0.2,
                            """Share of the dataset that will be saved for testing.""")
 tf.app.flags.DEFINE_string('validation_share', 0.05,
                            """Share of the dataset that will be saved for validation.""")
-tf.app.flags.DEFINE_string('max_images', 4096,
+tf.app.flags.DEFINE_string('max_images', 131072,
                            """Max number of images imported. 0 for no limit.""")
 
 # constants of the runway dataset
@@ -40,13 +40,10 @@ def _convert_to_record(image, label, writer):
     :param writer: file writer
     """
     image_raw = image.tostring()
-    rows = image.shape[1]
-    cols = image.shape[2]
-    depth = image.shape[3]
+    #rows = image.shape[1]
+    #cols = image.shape[2]
+    #depth = image.shape[3]
     example = tf.train.Example(features=tf.train.Features(feature={
-        'height': tf.train.Feature(int64_list=tf.train.Int64List(value=[rows])),
-        'width': tf.train.Feature(int64_list=tf.train.Int64List(value=[cols])),
-        'depth': tf.train.Feature(int64_list=tf.train.Int64List(value=[depth])),
         'label': tf.train.Feature(int64_list=tf.train.Int64List(value=[int(label)])),
         'image_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[image_raw])),
         }))
@@ -137,35 +134,44 @@ def serialize():
         threads = tf.train.start_queue_runners(coord=coord)
 
         # write training images
-        filename = os.path.join(FLAGS.data_dir, _FILENAME_TRAIN)
+        filename = os.path.join(FLAGS.output_dir, _FILENAME_TRAIN)
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
         for i in range(num_train_images):
+            if i % 1000 == 0:
+                print('- Wrote {0} out of {1} files...'.format(i, num_train_images))
+
             image_tensor = np.array(sess.run([image]))
-            _convert_to_record(image_tensor, np.array([images_labels_shuf[i]]), writer)
+            _convert_to_record(image_tensor, images_labels_shuf[i], writer)
         writer.close()
 
         # write test images
-        filename = os.path.join(FLAGS.data_dir, _FILENAME_TEST)
+        filename = os.path.join(FLAGS.output_dir, _FILENAME_TEST)
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
         for i in range(num_train_images,(num_train_images + num_test_images)):
+            if (i - num_train_images) % 1000 == 0:
+                print('- Wrote {0} out of {1} files...'.format(i - num_train_images, num_test_images))
             image_tensor = np.array(sess.run([image]))
-            _convert_to_record(image_tensor, np.array([images_labels_shuf[i]]), writer)
+            _convert_to_record(image_tensor, images_labels_shuf[i], writer)
         writer.close()
 
         # write val images
-        filename = os.path.join(FLAGS.data_dir, _FILENAME_VAL)
+        filename = os.path.join(FLAGS.output_dir, _FILENAME_VAL)
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
         for i in range((num_train_images + num_test_images),(num_train_images + num_test_images + num_val_images)):
+            if (i - (num_train_images + num_test_images)) % 1000 == 0:
+                print('- Wrote {0} out of {1} files...'.format(i - (num_train_images + num_test_images),
+                                                               num_val_images))
             image_tensor = np.array(sess.run([image]))
-            _convert_to_record(image_tensor, np.array([images_labels_shuf[i]]), writer)
+            _convert_to_record(image_tensor, images_labels_shuf[i], writer)
         writer.close()
 
         # Finish off the filename queue coordinator.
         coord.request_stop()
         coord.join(threads)
+
 
 def _read_and_decode(filename_queue):
     """
@@ -194,6 +200,9 @@ def _read_and_decode(filename_queue):
     # here.  Since we are not applying any distortions in this
     # example, and the next step expects the image to be flattened
     # into a vector, we don't bother.
+    #image = tf.image.crop_to_bounding_box(image, 60, 35, 200, 75)
+    # resizing the image to 50% of the original width
+    image = tf.image.resize_images(image, 151, 71, method=0, align_corners=False)
 
     # Convert from [0, 255] -> [-0.5, 0.5] floats.
     image = tf.cast(image, tf.float32) * (1. / 255) - 0.5
@@ -203,31 +212,51 @@ def _read_and_decode(filename_queue):
 
     return image, label
 
-def inputs(batch_size):
+
+def inputs(batch_size, num_examples_epoch, eval_data=False, shuffle=True):
     """
-    Read images and labels in shuffled batches
+    Read images and labels in  batches
     :param batch_size: size of the batch
     :return: images 4D tensor, labels 1D tensor
     """
-    filename = os.path.join(FLAGS.data_dir, _FILENAME_TRAIN)
+    if not eval_data:
+        filenames = [os.path.join(FLAGS.output_dir, _FILENAME_TRAIN)]
+    else:
+        filenames = [os.path.join(FLAGS.output_dir, _FILENAME_TEST)]
+
+    for f in filenames:
+        if not tf.gfile.Exists(f):
+            raise ValueError('Failed to find file: ' + f)
 
     with tf.name_scope('input'):
-        filename_queue = tf.train.string_input_producer([filename])
+        filename_queue = tf.train.string_input_producer(filenames)
 
         # Even when reading in multiple threads, share the filename
         # queue.
         image, label = _read_and_decode(filename_queue)
 
-        # Shuffle the examples and collect them into batch_size batches.
-        # (Internally uses a RandomShuffleQueue.)
-        # We run this in two threads to avoid being a bottleneck.
-        images, sparse_labels = tf.train.shuffle_batch(
-            [image, label], batch_size=batch_size, num_threads=2,
-            capacity=1000 + 3 * batch_size,
-            # Ensures a minimum amount of shuffling of examples.
-            min_after_dequeue=1000)
+        # Ensure that the random shuffling has good mixing properties.
+        min_fraction_of_examples_in_queue = 0.4
+        min_queue_examples = int(num_examples_epoch *
+                                 min_fraction_of_examples_in_queue)
 
-    return images, sparse_labels
+        if shuffle:
+            # Shuffle the examples and collect them into batch_size batches.
+            # (Internally uses a RandomShuffleQueue.)
+            # We run this in two threads to avoid being a bottleneck.
+            images_batch, labels_batch = tf.train.shuffle_batch(
+                [image, label], batch_size=batch_size, num_threads=2,
+                capacity=min_queue_examples + 3 * batch_size,
+                # Ensures a minimum amount of shuffling of examples.
+                min_after_dequeue=min_queue_examples    )
+        else:
+            images_batch, labels_batch = tf.train.batch(
+                [image, label],
+                batch_size=batch_size,
+                num_threads=2,
+                capacity=min_queue_examples + 3 * batch_size)
+
+    return images_batch, labels_batch
 
 
 if __name__ == '__main__':
