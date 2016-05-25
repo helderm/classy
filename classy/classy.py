@@ -81,7 +81,7 @@ def _activation_summary(x):
     tf.scalar_summary(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
 
 
-def _add_loss_summaries(total_loss):
+def add_loss_summaries(total_loss):
     """Add summaries for losses in the Classy model.
 
     Generates moving average for all losses and associated summaries for
@@ -106,6 +106,31 @@ def _add_loss_summaries(total_loss):
         tf.scalar_summary(l.op.name, loss_averages.average(l))
 
     return loss_averages_op
+
+
+def add_accuracy_summaries(total_accuracy):
+    """Add summaries for accuracy in the Classy model.
+
+    Generates moving average for all accuracies and associated summaries for
+    visualizing the performance of the network.
+
+    Args:
+    total_accuracy: Total loss from accuracy().
+    Returns:
+    loss_averages_op: op for generating moving averages of losses.
+    """
+    # Compute the moving average of all individual losses and the total loss.
+    acc_averages = tf.train.ExponentialMovingAverage(0.9, name='avg')
+    accuracies = tf.get_collection('accuracies')
+    acc_averages_op = acc_averages.apply(accuracies + [total_accuracy])
+
+    for l in accuracies + [total_accuracy]:
+        # Name each loss as '(raw)' and name the moving average version of the loss
+        # as the original loss name.
+        tf.scalar_summary(l.op.name +' (raw)', l)
+        tf.scalar_summary(l.op.name, acc_averages.average(l))
+
+    return acc_averages_op
 
 
 def inference(images):
@@ -210,3 +235,24 @@ def loss(logits, labels):
     # The total loss is defined as the cross entropy loss plus all of the weight
     # decay terms (L2 loss).
     return tf.add_n(tf.get_collection('losses'), name='total_loss')
+
+
+def accuracy(logits, labels):
+    """Evaluate the quality of the logits at predicting the label.
+
+    Args:
+    logits: Logits tensor, float - [batch_size, NUM_CLASSES].
+    labels: Labels tensor, int32 - [batch_size], with values in the
+      range [0, NUM_CLASSES).
+
+    Returns:
+    A scalar int32 tensor with the number of examples (out of batch_size)
+    that were predicted correctly.
+    """
+    # For a classifier model, we can use the in_top_k Op.
+    # It returns a bool tensor with shape [batch_size] that is true for
+    # the examples where the label is in the top k (here k=1)
+    # of all logits for that example.
+    correct = tf.nn.in_top_k(logits, labels, 1)
+    # Return the number of true entries.
+    return tf.reduce_sum(tf.cast(correct, tf.int32)) / FLAGS.batch_size
