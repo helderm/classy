@@ -21,6 +21,9 @@ tf.app.flags.DEFINE_string('validation_share', 0.05,
                            """Share of the dataset that will be saved for validation.""")
 tf.app.flags.DEFINE_string('max_images', 131072,
                            """Max number of images imported. 0 for no limit.""")
+tf.app.flags.DEFINE_integer('train_num_files', 24,
+                            """ Number of training files to have.""")
+
 
 # constants of the runway dataset
 IMAGE_WIDTH = 142
@@ -39,10 +42,12 @@ def _convert_to_record(image, label, writer):
     :param label: 1D label tensor
     :param writer: file writer
     """
+    if rows != IMAGE_HEIGHT or cols != IMAGE_WIDTH or depth != 3:
+        print('Found an image with wrong dimensions, ignoring...')
+        return
+
     image_raw = image.tostring()
-    #rows = image.shape[1]
-    #cols = image.shape[2]
-    #depth = image.shape[3]
+
     example = tf.train.Example(features=tf.train.Features(feature={
         'label': tf.train.Feature(int64_list=tf.train.Int64List(value=[int(label)])),
         'image_raw': tf.train.Feature(bytes_list=tf.train.BytesList(value=[image_raw])),
@@ -79,7 +84,7 @@ def serialize():
                     image_label = 3
             if (image_label == -1):
                 raise ValueError('Label could not be identified')
-                
+
             fashionshow_path = os.path.join(brand_path, fashionshow)
             image_files = glob.glob(fashionshow_path + '/*.jpg')
             images_paths.extend(image_files)
@@ -90,10 +95,10 @@ def serialize():
             images_paths[:FLAGS.max_images]
             images_labels[:FLAGS.max_images]
             break
-    
+
     if (len(images_paths) != len(images_labels)):
         raise ValueError('Inputs and outputs have different lengths')
-    
+
     # shuffle the images
     images_paths_shuf = []
     images_labels_shuf = []
@@ -110,7 +115,7 @@ def serialize():
     num_test_images = int(len(images_paths_shuf) * FLAGS.test_share)
     num_val_images = int(len(images_paths_shuf) * FLAGS.validation_share)
     num_train_images = len(images_paths_shuf) - num_test_images - num_val_images
-    
+
     # Read an entire image file which is required since they're JPEGs, if the images
     # are too large they could be split in advance to smaller files or use the Fixed
     # reader to split up the file.
@@ -134,12 +139,21 @@ def serialize():
         threads = tf.train.start_queue_runners(coord=coord)
 
         # write training images
-        filename = os.path.join(FLAGS.output_dir, _FILENAME_TRAIN)
+        num_examples_per_file = int(num_train_images / FLAGS.train_num_files)
+        file_idx = 0
+        filename = os.path.join(FLAGS.output_dir, _FILENAME_TRAIN + str(file_idx))
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
         for i in range(num_train_images):
             if i % 1000 == 0:
                 print('- Wrote {0} out of {1} files...'.format(i, num_train_images))
+
+            if (i+1) % num_examples_per_file == 0:
+                writer.close()
+                file_idx += 1
+                filename = os.path.join(FLAGS.output_dir, _FILENAME_TRAIN + str(file_idx))
+                print('Writing', filename)
+                writer = tf.python_io.TFRecordWriter(filename)
 
             image_tensor = np.array(sess.run([image]))
             _convert_to_record(image_tensor, images_labels_shuf[i], writer)
@@ -200,7 +214,7 @@ def _read_and_decode(filename_queue):
     # here.  Since we are not applying any distortions in this
     # example, and the next step expects the image to be flattened
     # into a vector, we don't bother.
-    #image = tf.image.crop_to_bounding_box(image, 60, 35, 200, 75)
+    #image = tf.image.crop_to_bounding_bcalcox(image, 60, 35, 200, 75)
     # resizing the image to 50% of the original width
     image = tf.image.resize_images(image, 151, 71, method=0, align_corners=False)
 
@@ -220,7 +234,9 @@ def inputs(batch_size, num_examples_epoch, eval_data=False, shuffle=True):
     :return: images 4D tensor, labels 1D tensor
     """
     if not eval_data:
-        filenames = [os.path.join(FLAGS.output_dir, _FILENAME_TRAIN)]
+        filenames = [os.path.join(FLAGS.output_dir, _FILENAME_TRAIN + str(i))
+                        for i in range(FLAGS.train_num_files)]
+                        #for i in range(1)]
     else:
         filenames = [os.path.join(FLAGS.output_dir, _FILENAME_TEST)]
 

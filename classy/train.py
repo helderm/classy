@@ -23,14 +23,14 @@ tf.app.flags.DEFINE_string('train_dir', '../data/train/',
                            """and checkpoint.""")
 tf.app.flags.DEFINE_integer('max_steps', 20000,
                             """Number of batches to run.""")
-tf.app.flags.DEFINE_integer('batch_size', 32,
+tf.app.flags.DEFINE_integer('batch_size', 1,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
 tf.app.flags.DEFINE_boolean('compress_output', False,
                             """Whether to log device placement.""")
 
-NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 5000
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 98304 # total images * 0.75 training
 TOWER_NAME = 'tower'
 NUM_CLASSES = 4
 
@@ -41,26 +41,6 @@ INITIAL_LEARNING_RATE = 0.1       # Initial learning rate.
 
 # set to true when the user requested to stop the training
 _shutdown = False
-
-def evaluation(logits, labels):
-    """Evaluate the quality of the logits at predicting the label.
-
-    Args:
-    logits: Logits tensor, float - [batch_size, NUM_CLASSES].
-    labels: Labels tensor, int32 - [batch_size], with values in the
-      range [0, NUM_CLASSES).
-
-    Returns:
-    A scalar int32 tensor with the number of examples (out of batch_size)
-    that were predicted correctly.
-    """
-    # For a classifier model, we can use the in_top_k Op.
-    # It returns a bool tensor with shape [batch_size] that is true for
-    # the examples where the label is in the top k (here k=1)
-    # of all logits for that example.
-    correct = tf.nn.in_top_k(logits, labels, 1)
-    # Return the number of true entries.
-    return tf.reduce_sum(tf.cast(correct, tf.int32))
 
 
 def train(total_loss, global_step):
@@ -87,7 +67,7 @@ def train(total_loss, global_step):
     tf.scalar_summary('learning_rate', lr)
 
     # Generate moving averages of all losses and associated summaries.
-    loss_averages_op = cl._add_loss_summaries(total_loss)
+    loss_averages_op = cl.add_loss_summaries(total_loss)
 
     # Compute gradients.
     with tf.control_dependencies([loss_averages_op]):
@@ -134,6 +114,10 @@ def run_training():
         # Calculate loss.
         loss = cl.loss(logits, labels)
 
+        # Calculate accuracy
+        accuracy = cl.accuracy(logits, labels)
+        cl.add_accuracy_summaries(accuracy)
+
         # Build a Graph that trains the model with one batch of examples and
         # updates the model parameters.
         train_op = train(loss, global_step)
@@ -143,9 +127,6 @@ def run_training():
 
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.merge_all_summaries()
-
-        # get a tensor for evaluating the training
-        correct_examples = evaluation(logits, labels)
 
         # Build an initialization operation to run below.
         init = tf.initialize_all_variables()
@@ -161,15 +142,12 @@ def run_training():
         summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
 
         max_steps = np.iinfo(np.int32).max if FLAGS.max_steps == 0 else FLAGS.max_steps
+        tr_accuracy = []
+        tr_loss = []
         for step in range(max_steps):
             start_time = time.time()
-            _, loss_value, num_corr_examples = sess.run([train_op, loss, correct_examples])
+            _, loss_value, acc_value = sess.run([train_op, loss, accuracy])
             duration = time.time() - start_time
-
-            #images_v, labels_v = sess.run([images, labels])
-            #print(images_v)
-            #print('--------')
-            #print(labels_v)
 
             assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
 
@@ -178,14 +156,21 @@ def run_training():
                 examples_per_sec = num_examples_per_step / duration
                 sec_per_batch = float(duration)
 
-                format_str = ('%s: step %d, loss = %.2f, train_acc = %d/%d, (%.1f examples/sec; %.3f '
+                tr_loss.append(loss_value)
+                tr_accuracy.append(acc_value)
+
+                format_str = ('%s: step %d, loss = %.2f, train_acc = %.2f, (%.1f examples/sec; %.3f '
                               'sec/batch)')
-                print(format_str % (datetime.now(), step, loss_value, num_corr_examples, FLAGS.batch_size,
+                print(format_str % (datetime.now(), step, loss_value, acc_value,
                                     examples_per_sec, sec_per_batch))
 
             if step % 100 == 0:
                 summary_str = sess.run(summary_op)
                 summary_writer.add_summary(summary_str, step)
+
+                # save accuracy and loss
+                np.save(os.path.join(FLAGS.train_dir, 'tr_loss'), np.array(tr_loss))
+                np.save(os.path.join(FLAGS.train_dir, 'tr_accuracy'), np.array(tr_accuracy))
 
             # Save the model checkpoint periodically.
             if step % 1000 == 0 or (step + 1) == FLAGS.max_steps:
