@@ -140,17 +140,19 @@ def serialize():
         coord = tf.train.Coordinator()
         threads = tf.train.start_queue_runners(coord=coord)
 
-        # write training images
+        # split images in different files
         num_examples_per_file = int(num_train_images / FLAGS.train_num_files)
         file_idx = 0
+
+        # write training images
         filename = os.path.join(FLAGS.output_dir, _FILENAME_TRAIN + str(file_idx))
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
         for i in range(num_train_images):
             if i % 1000 == 0:
-                print('- Wrote {0} out of {1} files...'.format(i, num_train_images))
+                print('- Wrote {0} out of {1} images...'.format(i, num_train_images))
 
-            if (i+1) % num_examples_per_file == 0:
+            if (i+1) % num_examples_per_file == 0 and file_idx+1 != FLAGS.train_num_files:
                 writer.close()
                 file_idx += 1
                 filename = os.path.join(FLAGS.output_dir, _FILENAME_TRAIN + str(file_idx))
@@ -205,18 +207,11 @@ def _read_and_decode(filename_queue):
             'label': tf.FixedLenFeature([], tf.int64),
         })
 
-    # Convert from a scalar string tensor (whose single string has
-    # length mnist.IMAGE_PIXELS) to a uint8 tensor with shape
-    # [mnist.IMAGE_PIXELS].
+    # Convert from a scalar string tensor
     image = tf.decode_raw(features['image_raw'], tf.uint8)
     image.set_shape([IMAGE_WIDTH * IMAGE_HEIGHT * 3])
     image = tf.reshape(image, [IMAGE_HEIGHT, IMAGE_WIDTH, 3])
 
-    # OPTIONAL: Could reshape into a 28x28 image and apply distortions
-    # here.  Since we are not applying any distortions in this
-    # example, and the next step expects the image to be flattened
-    # into a vector, we don't bother.
-    #image = tf.image.crop_to_bounding_bcalcox(image, 60, 35, 200, 75)
     # resizing the image to 50% of the original width
     image = tf.image.resize_images(image, 151, 71, method=0, align_corners=False)
 

@@ -5,15 +5,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
 import re
-import numpy
 import tensorflow as tf
-import time
-import numpy as np
-from datetime import datetime
-
-import runway as rw
 
 FLAGS = tf.app.flags.FLAGS
 

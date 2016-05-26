@@ -7,30 +7,26 @@ from __future__ import print_function
 
 import os
 import signal
-import re
-import numpy
 import tensorflow as tf
 import time
 import numpy as np
 from datetime import datetime
 
-import runway as rw
-import classy as cl
+import classy.runway as rw
+import classy.model as cl
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('train_dir', '../data/train/',
                            """Directory where to write event logs """
                            """and checkpoint.""")
-tf.app.flags.DEFINE_integer('max_steps', 65006,
+tf.app.flags.DEFINE_integer('num_epochs', 8,
                             """Number of batches to run.""")
-tf.app.flags.DEFINE_integer('batch_size', 32,
+tf.app.flags.DEFINE_integer('batch_size', 16,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
-tf.app.flags.DEFINE_boolean('compress_output', False,
-                            """Whether to log device placement.""")
 
-NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 260025 # total images * 0.75 training
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 98304 # total images * 0.75 training
 TOWER_NAME = 'tower'
 NUM_CLASSES = 4
 
@@ -125,15 +121,8 @@ def run_training():
         # updates the model parameters.
         train_op = train(loss, global_step)
 
-
-
-
-
-
-
-
-        # Create a saver.
-        saver = tf.train.Saver(tf.all_variables())
+        # Create a saver. Store 2 files per epoch, plus 2 for the beginning and end of training
+        saver = tf.train.Saver(tf.all_variables(), max_to_keep=FLAGS.num_epochs*2+2)
 
         # Build the summary operation based on the TF collection of Summaries.
         summary_op = tf.merge_all_summaries()
@@ -149,11 +138,13 @@ def run_training():
         # Start the queue runners.
         tf.train.start_queue_runners(sess=sess)
 
+        # start the summary writer
         summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
 
-        max_steps = np.iinfo(np.int32).max if FLAGS.max_steps == 0 else FLAGS.max_steps
-        tr_accuracy = []
-        tr_loss = []
+        # start the training!
+        steps_per_epoch = int(NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN / FLAGS.batch_size)
+        steps_per_checkpoint = int(steps_per_epoch / 2)
+        max_steps = FLAGS.num_epochs * steps_per_epoch
         for step in range(max_steps):
             start_time = time.time()
             _, loss_value, acc_value = sess.run([train_op, loss, accuracy])
@@ -166,9 +157,6 @@ def run_training():
                 examples_per_sec = num_examples_per_step / duration
                 sec_per_batch = float(duration)
 
-                tr_loss.append(loss_value)
-                tr_accuracy.append(acc_value)
-
                 format_str = ('%s: step %d, loss = %.2f, train_acc = %.2f, (%.1f examples/sec; %.3f '
                               'sec/batch)')
                 print(format_str % (datetime.now(), step, loss_value, acc_value,
@@ -178,12 +166,8 @@ def run_training():
                 summary_str = sess.run(summary_op)
                 summary_writer.add_summary(summary_str, step)
 
-                # save accuracy and loss
-                np.save(os.path.join(FLAGS.train_dir, 'tr_loss'), np.array(tr_loss))
-                np.save(os.path.join(FLAGS.train_dir, 'tr_accuracy'), np.array(tr_accuracy))
-
             # Save the model checkpoint periodically.
-            if step % 1000 == 0 or (step + 1) == FLAGS.max_steps:
+            if step % steps_per_checkpoint == 0 or (step + 1) == max_steps or _shutdown:
                 checkpoint_path = os.path.join(FLAGS.train_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
 
@@ -191,11 +175,6 @@ def run_training():
                 break
 
         print('Classy training finished!')
-
-        if FLAGS.compress_output:
-            import shutil
-            outname = 'train_cl_{0}'.format(datetime.now().strftime('%Y%m%d_%H%M%S'))
-            shutil.make_archive(outname, 'gztar', FLAGS.train_dir)
 
 
 def handler(signum, frame):
