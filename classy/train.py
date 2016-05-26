@@ -21,22 +21,22 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('train_dir', '../data/train/',
                            """Directory where to write event logs """
                            """and checkpoint.""")
-tf.app.flags.DEFINE_integer('max_steps', 20000,
+tf.app.flags.DEFINE_integer('max_steps', 65006,
                             """Number of batches to run.""")
-tf.app.flags.DEFINE_integer('batch_size', 1,
+tf.app.flags.DEFINE_integer('batch_size', 32,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
 tf.app.flags.DEFINE_boolean('compress_output', False,
                             """Whether to log device placement.""")
 
-NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 98304 # total images * 0.75 training
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 260025 # total images * 0.75 training
 TOWER_NAME = 'tower'
 NUM_CLASSES = 4
 
 # Constants describing the training process.
-NUM_EPOCHS_PER_DECAY = 350.0      # Epochs after which learning rate decays.
-LEARNING_RATE_DECAY_FACTOR = 0.1  # Learning rate decay factor.
+NUM_EPOCHS_PER_DECAY = 2.0      # Epochs after which learning rate decays.
+LEARNING_RATE_DECAY_FACTOR = 0.95  # Learning rate decay factor.
 INITIAL_LEARNING_RATE = 0.1       # Initial learning rate.
 
 # set to true when the user requested to stop the training
@@ -109,18 +109,28 @@ def run_training():
 
         # Build a Graph that computes the logits predictions from the
         # inference model.
-        logits = cl.inference(images)
+        with tf.variable_scope("inferences") as scope:
+            logits = cl.inference(images, keep_prob = 0.5)
+            scope.reuse_variables()
+            logits_accu = cl.inference(images, keep_prob = 1.0)
 
         # Calculate loss.
         loss = cl.loss(logits, labels)
 
         # Calculate accuracy
-        accuracy = cl.accuracy(logits, labels)
+        accuracy = cl.accuracy(logits_accu, labels)
         cl.add_accuracy_summaries(accuracy)
 
         # Build a Graph that trains the model with one batch of examples and
         # updates the model parameters.
         train_op = train(loss, global_step)
+
+
+
+
+
+
+
 
         # Create a saver.
         saver = tf.train.Saver(tf.all_variables())
