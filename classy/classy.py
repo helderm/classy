@@ -101,8 +101,10 @@ def add_loss_summaries(total_loss):
 
 def add_accuracy_summaries(total_accuracy):
     """Add summaries for accuracy in the Classy model.
+
     Generates moving average for all accuracies and associated summaries for
     visualizing the performance of the network.
+
     Args:
     total_accuracy: Total loss from accuracy().
     Returns:
@@ -244,6 +246,7 @@ def accuracy(logits, labels):
     logits: Logits tensor, float - [batch_size, NUM_CLASSES].
     labels: Labels tensor, int32 - [batch_size], with values in the
       range [0, NUM_CLASSES).
+
     Returns:
     A scalar int32 tensor with the number of examples (out of batch_size)
     that were predicted correctly.
@@ -255,3 +258,4 @@ def accuracy(logits, labels):
     correct = tf.nn.in_top_k(logits, labels, 1)
     # Return the number of true entries.
     return tf.reduce_sum(tf.cast(correct, tf.int32)) / FLAGS.batch_size
+

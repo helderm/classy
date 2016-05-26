@@ -11,7 +11,8 @@ import tensorflow as tf
 import numpy as np
 
 FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string('input_dir', '../data/release_runway_0.2/data/images/',
+
+tf.app.flags.DEFINE_string('images_dir', '../data/release_runway_0.2/data/images/',
                            """Path to the Runway data directory.""")
 tf.app.flags.DEFINE_string('output_dir', '../data/release_runway_0.2/data/',
                            """Path to the serialized Runway dataset.""")
@@ -42,7 +43,8 @@ def _convert_to_record(image, label, writer):
     :param label: 1D label tensor
     :param writer: file writer
     """
-    if rows != IMAGE_HEIGHT or cols != IMAGE_WIDTH or depth != 3:
+
+    if image.shape[1] != IMAGE_HEIGHT or image.shape[2] != IMAGE_WIDTH or image.shape[3] != 3:
         print('Found an image with wrong dimensions, ignoring...')
         return
 
@@ -59,7 +61,7 @@ def serialize():
     """
     Serialize the Runway images and labels into TFRecords
     """
-    base_data_path = FLAGS.input_dir
+    base_data_path = FLAGS.images_dir
     images_paths = []
     images_labels = []
 
@@ -227,25 +229,28 @@ def _read_and_decode(filename_queue):
     return image, label
 
 
-def inputs(batch_size, num_examples_epoch, eval_data=False, shuffle=True):
+def inputs(batch_size, num_examples_epoch, eval_type='train', shuffle=True):
     """
     Read images and labels in  batches
     :param batch_size: size of the batch
     :return: images 4D tensor, labels 1D tensor
     """
-    if not eval_data:
+    if eval_type == 'train':
         filenames = [os.path.join(FLAGS.output_dir, _FILENAME_TRAIN + str(i))
                         for i in range(FLAGS.train_num_files)]
                         #for i in range(1)]
-    else:
+    elif eval_type == 'test':
         filenames = [os.path.join(FLAGS.output_dir, _FILENAME_TEST)]
+    else:
+        filenames = [os.path.join(FLAGS.output_dir, _FILENAME_VAL)]
+
 
     for f in filenames:
         if not tf.gfile.Exists(f):
             raise ValueError('Failed to find file: ' + f)
 
     with tf.name_scope('input'):
-        filename_queue = tf.train.string_input_producer(filenames)
+        filename_queue = tf.train.string_input_producer(filenames, shuffle=shuffle)
 
         # Even when reading in multiple threads, share the filename
         # queue.
