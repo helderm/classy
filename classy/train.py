@@ -21,7 +21,7 @@ tf.app.flags.DEFINE_string('train_dir', '../data/train/',
                            """and checkpoint.""")
 tf.app.flags.DEFINE_integer('num_epochs', 8,
                             """Number of batches to run.""")
-tf.app.flags.DEFINE_integer('batch_size', 16,
+tf.app.flags.DEFINE_integer('batch_size', 32,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
@@ -142,6 +142,8 @@ def run_training():
         summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
 
         # start the training!
+        accuracies = []
+        losses = []
         steps_per_epoch = int(NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN / FLAGS.batch_size)
         steps_per_checkpoint = int(steps_per_epoch / 2)
         max_steps = FLAGS.num_epochs * steps_per_epoch
@@ -151,6 +153,9 @@ def run_training():
             duration = time.time() - start_time
 
             assert not np.isnan(loss_value), 'Model diverged with loss = NaN'
+
+            losses.append(loss_value)
+            accuracies.append(acc_value)
 
             if step % 10 == 0:
                 num_examples_per_step = FLAGS.batch_size
@@ -165,6 +170,8 @@ def run_training():
             if step % 100 == 0:
                 summary_str = sess.run(summary_op)
                 summary_writer.add_summary(summary_str, step)
+                np.save(os.path.join(FLAGS.train_dir, 'tr_losses'), np.array(losses))
+                np.save(os.path.join(FLAGS.train_dir, 'tr_accuracies'), np.array(accuracies))
 
             # Save the model checkpoint periodically.
             if step % steps_per_checkpoint == 0 or (step + 1) == max_steps or _shutdown:
