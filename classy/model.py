@@ -255,5 +255,5 @@ def accuracy(logits, labels):
     # of all logits for that example.
     correct = tf.nn.in_top_k(logits, labels, 1)
     # Return the number of true entries.
-    return tf.reduce_sum(tf.cast(correct, tf.int32)) / FLAGS.batch_size
+    return tf.to_float(tf.reduce_sum(tf.cast(correct, tf.int32))) / float(FLAGS.batch_size)
 
