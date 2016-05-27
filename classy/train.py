@@ -12,8 +12,8 @@ import time
 import numpy as np
 from datetime import datetime
 
-import classy.runway as rw
-import classy.model as cl
+import runway as rw
+import model as cl
 
 FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('train_dir', '../data/train/',
