@@ -25,6 +25,8 @@ tf.app.flags.DEFINE_integer('batch_size', 32,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
+tf.app.flags.DEFINE_float('keep_prob', 0.5,
+                            """Probability of keeping weights in the dense layer (dropout).""")
 
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 98304 # total images * 0.75 training
 TOWER_NAME = 'tower'
@@ -106,9 +108,9 @@ def run_training():
         # Build a Graph that computes the logits predictions from the
         # inference model.
         with tf.variable_scope("inferences") as scope:
-            logits = cl.inference(images, keep_prob = 0.5)
+            logits = cl.inference(images, keep_prob=FLAGS.keep_prob)
             scope.reuse_variables()
-            logits_accu = cl.inference(images, keep_prob = 1.0)
+            logits_accu = cl.inference(images, keep_prob=1.0)
 
         # Calculate loss.
         loss = cl.loss(logits, labels)
