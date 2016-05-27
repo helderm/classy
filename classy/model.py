@@ -117,7 +117,7 @@ def add_accuracy_summaries(total_accuracy):
     return acc_averages_op
 
 
-def inference(images, keep_prob):
+def inference(images, keep_prob=0.5, overlap_pool=True):
     """Build the Classy inference model.
     Args:
       images: Images returned from distorted_inputs() or inputs().
@@ -140,7 +140,12 @@ def inference(images, keep_prob):
         _activation_summary(conv1)
 
     # pool1
-    pool1 = tf.nn.max_pool(conv1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1],
+    if overlap_pool:
+        strides = [1, 2, 2, 1]
+    else:
+        strides = [1, 3, 3, 1]
+
+    pool1 = tf.nn.max_pool(conv1, ksize=[1, 3, 3, 1], strides=strides,
                            padding='SAME', name='pool1')
     # norm1
     norm1 = tf.nn.lrn(pool1, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
@@ -161,7 +166,7 @@ def inference(images, keep_prob):
                       name='norm2')
     # pool2
     pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1],
-                           strides=[1, 2, 2, 1], padding='SAME', name='pool2')
+                           strides=strides, padding='SAME', name='pool2')
 
     # conv3
     with tf.variable_scope('conv3') as scope:
