@@ -30,7 +30,7 @@ tf.app.flags.DEFINE_float('keep_prob', 0.5,
 tf.app.flags.DEFINE_boolean('overlap_pool', True,
                           """Whether to use overlapping pooling""")
 
-NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 98304 # total images * 0.75 training
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 98305 # total images * 0.75 training
 TOWER_NAME = 'tower'
 NUM_CLASSES = 4
 
@@ -109,16 +109,13 @@ def run_training():
 
         # Build a Graph that computes the logits predictions from the
         # inference model.
-        with tf.variable_scope("inferences") as scope:
-            logits = cl.inference(images, keep_prob=FLAGS.keep_prob, overlap_pool=FLAGS.overlap_pool)
-            scope.reuse_variables()
-            logits_accu = cl.inference(images, keep_prob=1.0, overlap_pool=FLAGS.overlap_pool)
+        logits = cl.inference(images, keep_prob=FLAGS.keep_prob, overlap_pool=FLAGS.overlap_pool)
 
         # Calculate loss.
         loss = cl.loss(logits, labels)
 
         # Calculate accuracy
-        accuracy = cl.accuracy(logits_accu, labels)
+        accuracy = cl.accuracy(logits, labels)
         cl.add_accuracy_summaries(accuracy)
 
         # Build a Graph that trains the model with one batch of examples and
