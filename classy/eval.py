@@ -28,16 +28,16 @@ import tensorflow as tf
 import runway as rw
 import model as md
 
-NUM_EXAMPLES_PER_EPOCH_FOR_TEST = 19660 # max_images * 0.2
-NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = 13107 # max_images * 0.05
+NUM_EXAMPLES_PER_EPOCH_FOR_TEST = 19660 # max_images * 0.15
+NUM_EXAMPLES_PER_EPOCH_FOR_VAL = 13107 # max_images * 0.10
 NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 98305 # total images * 0.75 training
 
 FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string('eval_dir', '../data/eval/',
                            """Directory where to write event logs.""")
-tf.app.flags.DEFINE_string('eval_type', 'eval',
-                           """Either 'test', 'train' or 'eval'.""")
+tf.app.flags.DEFINE_string('eval_type', 'val',
+                           """Either 'test', 'train' or 'val'.""")
 tf.app.flags.DEFINE_string('checkpoint_dir', '../data/train/',
                            """Directory where to read model checkpoints.""")
 tf.app.flags.DEFINE_integer('eval_interval_secs', 60 * 5,
@@ -46,6 +46,10 @@ tf.app.flags.DEFINE_boolean('run_once', True,
                          """Whether to run eval only once.""")
 tf.app.flags.DEFINE_integer('batch_size', 16,
                             """Number of images to process in a batch.""")
+tf.app.flags.DEFINE_float('keep_prob', 0.5,
+                            """Probability of keeping weights in the dense layer (dropout).""")
+tf.app.flags.DEFINE_boolean('overlap_pool', True,
+                          """Whether to use overlapping pooling""")
 
 
 def _get_num_examples():
@@ -55,7 +59,7 @@ def _get_num_examples():
     elif eval_type == 'test':
         return NUM_EXAMPLES_PER_EPOCH_FOR_TEST
     elif eval_type == 'val':
-        return NUM_EXAMPLES_PER_EPOCH_FOR_EVAL
+        return NUM_EXAMPLES_PER_EPOCH_FOR_VAL
     else:
         raise Exception('Unknown eval_type')
 
@@ -78,7 +82,7 @@ def evaluate():
 
             # Build a Graph that computes the logits predictions from the
             # inference model.
-            logits = md.inference(images)
+            logits = md.inference(images, keep_prob=FLAGS.keep_prob, overlap_pool=FLAGS.overlap_pool)
 
             # Calculate predictions.
             top_k_op = tf.nn.in_top_k(logits, labels, 1)
