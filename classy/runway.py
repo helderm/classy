@@ -16,11 +16,11 @@ tf.app.flags.DEFINE_string('images_dir', '../data/release_runway_0.2/data/images
                            """Path to the Runway data directory.""")
 tf.app.flags.DEFINE_string('output_dir', '../data/release_runway_0.2/data/',
                            """Path to the serialized Runway dataset.""")
-tf.app.flags.DEFINE_string('test_share', 0.2,
+tf.app.flags.DEFINE_float('test_share', 0.15,
                            """Share of the dataset that will be saved for testing.""")
-tf.app.flags.DEFINE_string('validation_share', 0.05,
+tf.app.flags.DEFINE_float('validation_share', 0.10,
                            """Share of the dataset that will be saved for validation.""")
-tf.app.flags.DEFINE_string('max_images', 131072,
+tf.app.flags.DEFINE_integer('max_images', 131072,
                            """Max number of images imported. 0 for no limit.""")
 tf.app.flags.DEFINE_integer('train_num_files', 24,
                             """ Number of training files to have.""")
@@ -94,10 +94,11 @@ def serialize():
                 images_labels.append(image_label)
 
         if FLAGS.max_images and len(images_paths) > FLAGS.max_images:
-            images_paths[:FLAGS.max_images]
-            images_labels[:FLAGS.max_images]
+            images_paths = images_paths[:FLAGS.max_images]
+            images_labels = images_labels[:FLAGS.max_images]
             break
 
+    print('Read {0} images!'.format(len(images_paths)))
     if (len(images_paths) != len(images_labels)):
         raise ValueError('Inputs and outputs have different lengths')
 
@@ -148,6 +149,7 @@ def serialize():
         filename = os.path.join(FLAGS.output_dir, _FILENAME_TRAIN + str(file_idx))
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
+        count = 0
         for i in range(num_train_images):
             if i % 1000 == 0:
                 print('- Wrote {0} out of {1} images...'.format(i, num_train_images))
@@ -161,30 +163,41 @@ def serialize():
 
             image_tensor = np.array(sess.run([image]))
             _convert_to_record(image_tensor, images_labels_shuf[i], writer)
+            count += 1
         writer.close()
+
+        print('Wrote {0} images on training!'.format(count))
 
         # write test images
         filename = os.path.join(FLAGS.output_dir, _FILENAME_TEST)
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
+        count = 0
         for i in range(num_train_images,(num_train_images + num_test_images)):
             if (i - num_train_images) % 1000 == 0:
                 print('- Wrote {0} out of {1} files...'.format(i - num_train_images, num_test_images))
             image_tensor = np.array(sess.run([image]))
             _convert_to_record(image_tensor, images_labels_shuf[i], writer)
+            count += 1
         writer.close()
+
+        print('Wrote {0} images on test!'.format(count))
 
         # write val images
         filename = os.path.join(FLAGS.output_dir, _FILENAME_VAL)
         print('Writing', filename)
         writer = tf.python_io.TFRecordWriter(filename)
+        count = 0
         for i in range((num_train_images + num_test_images),(num_train_images + num_test_images + num_val_images)):
             if (i - (num_train_images + num_test_images)) % 1000 == 0:
                 print('- Wrote {0} out of {1} files...'.format(i - (num_train_images + num_test_images),
                                                                num_val_images))
             image_tensor = np.array(sess.run([image]))
             _convert_to_record(image_tensor, images_labels_shuf[i], writer)
+            count += 1
         writer.close()
+
+        print('Wrote {0} images on validation!'.format(count))
 
         # Finish off the filename queue coordinator.
         coord.request_stop()
@@ -236,8 +249,10 @@ def inputs(batch_size, num_examples_epoch, eval_type='train', shuffle=True):
                         #for i in range(1)]
     elif eval_type == 'test':
         filenames = [os.path.join(FLAGS.output_dir, _FILENAME_TEST)]
-    else:
+    elif eval_type == 'val':
         filenames = [os.path.join(FLAGS.output_dir, _FILENAME_VAL)]
+    else:
+        raise Exception('Unknown eval type')
 
 
     for f in filenames:
