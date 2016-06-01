@@ -167,16 +167,6 @@ def inference(images, keep_prob=0.5, overlap_pool=True):
     # pool2
     pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1],
                            strides=strides, padding='SAME', name='pool2')
-    #
-    # # conv3
-    # with tf.variable_scope('conv3') as scope:
-    #     kernel = _variable_with_weight_decay('weights', shape=[3, 3, 64, 64],
-    #                                         stddev=1e-4, wd=0.0005)
-    #     conv = tf.nn.conv2d(pool2, kernel, [1, 1, 1, 1], padding='SAME')
-    #     biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.1))
-    #     bias = tf.nn.bias_add(conv, biases)
-    #     conv3 = tf.nn.relu(bias, name=scope.name)
-    #     _activation_summary(conv3)
 
     # dense3
     with tf.variable_scope('dense3') as scope:
