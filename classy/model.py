@@ -186,10 +186,7 @@ def inference(images, keep_prob=0.5, overlap_pool=True):
         weights = _variable_with_weight_decay('weights', shape=[dim, 384],
                                               stddev=0.04, wd=0.0005)
         biases = _variable_on_cpu('biases', [384], tf.constant_initializer(0.1))
-        if (keep_prob == 1.0):
-            dense3 = 0.5 * tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
-        else:
-            dense3 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
+        dense3 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
         _activation_summary(dense3)
 
     #drop-out
