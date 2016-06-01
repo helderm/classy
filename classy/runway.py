@@ -246,7 +246,6 @@ def inputs(batch_size, num_examples_epoch, eval_type='train', shuffle=True):
     if eval_type == 'train':
         filenames = [os.path.join(FLAGS.output_dir, _FILENAME_TRAIN + str(i))
                         for i in range(FLAGS.train_num_files)]
-                        #for i in range(1)]
     elif eval_type == 'test':
         filenames = [os.path.join(FLAGS.output_dir, _FILENAME_TEST)]
     elif eval_type == 'val':
