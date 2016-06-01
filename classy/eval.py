@@ -76,7 +76,7 @@ def evaluate():
     for path in ckpt.all_model_checkpoint_paths:
 
         with tf.Graph().as_default() as g:
-            # Get images and labels for CIFAR-10.
+            # Get images and labels
             num_examples = _get_num_examples()
             images, labels = rw.inputs(FLAGS.batch_size, num_examples, eval_type=FLAGS.eval_type, shuffle=False)
 
@@ -104,9 +104,7 @@ def evaluate():
                 ckpt_path = path if not os.path.isabs(FLAGS.checkpoint_dir) \
                     else os.path.join(FLAGS.checkpoint_dir, path)
                 saver.restore(sess, ckpt_path)
-                # Assuming model_checkpoint_path looks something like:
-                #   /my-favorite-path/cifar10_train/model.ckpt-0,
-                # extract global_step from it.
+
                 global_step = ckpt_path.split('/')[-1].split('-')[-1]
                 steps.append(global_step)
 
