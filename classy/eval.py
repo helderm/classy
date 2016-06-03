@@ -28,9 +28,9 @@ import tensorflow as tf
 import runway as rw
 import model as md
 
-NUM_EXAMPLES_PER_EPOCH_FOR_TEST = 19660 # max_images * 0.15
-NUM_EXAMPLES_PER_EPOCH_FOR_VAL = 13107 # max_images * 0.10
-NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 98305 # total images * 0.75 training
+NUM_EXAMPLES_PER_EPOCH_FOR_TEST = 51998 # max_images * 0.15
+NUM_EXAMPLES_PER_EPOCH_FOR_VAL = 34662 # max_images * 0.10
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 259987 # total images * 0.75 training
 
 FLAGS = tf.app.flags.FLAGS
 

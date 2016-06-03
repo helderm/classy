@@ -19,28 +19,63 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('train_dir', '../data/train/',
                            """Directory where to write event logs """
                            """and checkpoint.""")
-tf.app.flags.DEFINE_integer('num_epochs', 8,
+tf.app.flags.DEFINE_integer('num_epochs', 16,
                             """Number of batches to run.""")
 tf.app.flags.DEFINE_integer('batch_size', 32,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
                             """Whether to log device placement.""")
-tf.app.flags.DEFINE_float('keep_prob', 0.5,
+tf.app.flags.DEFINE_float('keep_prob', 1.0,
                             """Probability of keeping weights in the dense layer (dropout).""")
 tf.app.flags.DEFINE_boolean('overlap_pool', True,
                           """Whether to use overlapping pooling""")
+tf.app.flags.DEFINE_boolean('batch_norm', False,
+                            """Whether to normalize images in the batch""")
 
-NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 98305 # total images * 0.75 training
+
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = 259987 # total images * 0.75 training
 TOWER_NAME = 'tower'
 NUM_CLASSES = 4
 
 # Constants describing the training process.
-NUM_EPOCHS_PER_DECAY = 2.0      # Epochs after which learning rate decays.
-LEARNING_RATE_DECAY_FACTOR = 0.95  # Learning rate decay factor.
-INITIAL_LEARNING_RATE = 0.1       # Initial learning rate.
+NUM_EPOCHS_PER_DECAY = 1.0      # Epochs after which learning rate decays.
+LEARNING_RATE_DECAY_FACTOR = 0.90  # Learning rate decay factor.
+INITIAL_LEARNING_RATE = 0.15       # Initial learning rate.
 
 # set to true when the user requested to stop the training
 _shutdown = False
+
+
+def batch_norm(x, n_out, phase_train, scope='bn'):
+    """
+    Batch normalization on convolutional maps.
+    Args:
+        x:           Tensor, 4D BHWD input maps
+        n_out:       integer, depth of input maps
+        phase_train: boolean tf.Varialbe, true indicates training phase
+        scope:       string, variable scope
+    Return:
+        normed:      batch-normalized maps
+    """
+    with tf.variable_scope(scope):
+        beta = tf.Variable(tf.constant(0.0, shape=[n_out]),
+                                     name='beta', trainable=True)
+        gamma = tf.Variable(tf.constant(1.0, shape=[n_out]),
+                                      name='gamma', trainable=True)
+        batch_mean, batch_var = tf.nn.moments(x, [0,1,2], name='moments')
+        ema = tf.train.ExponentialMovingAverage(decay=0.5)
+
+        def mean_var_with_update():
+            ema_apply_op = ema.apply([batch_mean, batch_var])
+            with tf.control_dependencies([ema_apply_op]):
+                return tf.identity(batch_mean), tf.identity(batch_var)
+
+        mean, var = tf.cond(phase_train,
+                            mean_var_with_update,
+                            lambda: (ema.average(batch_mean), ema.average(batch_var)))
+        normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
+    return normed
+
 
 
 def train(total_loss, global_step):
@@ -106,6 +141,11 @@ def run_training():
 
         # Get images and labels for runway
         images, labels = rw.inputs(FLAGS.batch_size, NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN)
+
+        # Batch normalization
+        if FLAGS.batch_norm:
+            phase_train = tf.Variable(True, trainable=False, dtype=tf.bool)
+            images = batch_norm(images, 3, phase_train=phase_train)
 
         # Build a Graph that computes the logits predictions from the
         # inference model.

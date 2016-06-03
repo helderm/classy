@@ -43,8 +43,11 @@ def _variable_with_weight_decay(name, shape, stddev, wd):
     Returns:
     Variable Tensor
     """
-    var = _variable_on_cpu(name, shape,
-                         tf.truncated_normal_initializer(stddev=stddev))
+
+    init = tf.contrib.layers.xavier_initializer_conv2d(uniform=False) if len(shape) == 4 \
+            else tf.contrib.layers.xavier_initializer(uniform=False)
+
+    var = _variable_on_cpu(name, shape, init)
     if wd is not None:
         weight_decay = tf.mul(tf.nn.l2_loss(var), wd, name='weight_loss')
         tf.add_to_collection('losses', weight_decay)
@@ -178,10 +181,27 @@ def inference(images, keep_prob=0.5, overlap_pool=True):
         conv3 = tf.nn.relu(bias, name=scope.name)
         _activation_summary(conv3)
 
+    # norm3
+    norm3 = tf.nn.lrn(conv3, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
+                      name='norm3')
+    # pool3
+    pool3 = tf.nn.max_pool(norm3, ksize=[1, 3, 3, 1],
+                           strides=strides, padding='SAME', name='pool3')
+
+    # conv4
+    with tf.variable_scope('conv4') as scope:
+        kernel = _variable_with_weight_decay('weights', shape=[3, 3, 64, 64],
+                                             stddev=1e-4, wd=0.0005)
+        conv = tf.nn.conv2d(pool3, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.1))
+        bias = tf.nn.bias_add(conv, biases)
+        conv4 = tf.nn.relu(bias, name=scope.name)
+        _activation_summary(conv4)
+
     # dense3
     with tf.variable_scope('dense3') as scope:
         # Move everything into depth so we can perform a single matrix multiply.
-        reshape = tf.reshape(conv3, [FLAGS.batch_size, -1])
+        reshape = tf.reshape(conv4, [FLAGS.batch_size, -1])
         dim = reshape.get_shape()[1].value
         weights = _variable_with_weight_decay('weights', shape=[dim, 384],
                                               stddev=0.04, wd=0.0005)
