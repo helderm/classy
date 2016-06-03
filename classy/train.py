@@ -19,8 +19,8 @@ FLAGS = tf.app.flags.FLAGS
 tf.app.flags.DEFINE_string('train_dir', '../data/train/',
                            """Directory where to write event logs """
                            """and checkpoint.""")
-tf.app.flags.DEFINE_integer('num_epochs', 16,
-                            """Number of batches to run.""")
+tf.app.flags.DEFINE_integer('num_epochs', 30,
+                            """Number of epochs to run.""")
 tf.app.flags.DEFINE_integer('batch_size', 32,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False,
@@ -38,7 +38,7 @@ TOWER_NAME = 'tower'
 NUM_CLASSES = 4
 
 # Constants describing the training process.
-NUM_EPOCHS_PER_DECAY = 1.0      # Epochs after which learning rate decays.
+NUM_EPOCHS_PER_DECAY = 2.0      # Epochs after which learning rate decays.
 LEARNING_RATE_DECAY_FACTOR = 0.90  # Learning rate decay factor.
 INITIAL_LEARNING_RATE = 0.15       # Initial learning rate.
 
